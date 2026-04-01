@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Slow Downloader</title>
+    <style>
+        body { color: #333; font-size: 18px }
+    </style>
+</head>
+<body>
+<p>Downloading Data to Localhost...</p>
+<p id="status">Initializing...</p>
+
+<!-- Hidden iframe used to load the text files -->
+<iframe id="dataFrame" style="display:none;"></iframe>
+
+<script>
+    const LOCAL_ENDPOINT = "http://localhost:8080/up";
+    const REST_PERIOD_MS = 500000; // 5 seconds rest between downloads
+
+    let chunks = [];
+    let currentIndex = 0;
+
+    // 1. Fetch the list of files
+    fetch('manifest.json')
+        .then(res => res.json())
+        .then(data => {
+            chunks = data;
+            loadNextChunk();
+        });
+
+    function loadNextChunk() {
+        if (currentIndex >= chunks.length) {
+            document.getElementById("status").innerText = "All chunks downloaded successfully!";
+            return;
+        }
+
+        let fileName = chunks[currentIndex];
+        document.getElementById("status").innerText = `Fetching ${fileName}... (Chunk ${currentIndex + 1} of ${chunks.length})`;
+
+        let iframe = document.getElementById("dataFrame");
+
+        // 2. Set onload handler for the iframe
+        iframe.onload = function() {
+            // Browsers usually wrap plain text in a <pre> tag inside the iframe body
+            let fileContent = iframe.contentDocument.body.textContent;
+
+            document.getElementById("status").innerText = `Sending ${fileName} to localhost...`;
+
+            // 3. Send data to local Spring Boot app
+            fetch(LOCAL_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    index: currentIndex,
+                    total: chunks.length,
+                    data: fileContent
+                })
+            })
+            .then(response => {
+                if(response.ok) {
+                    currentIndex++;
+                    document.getElementById("status").innerText = `Resting for ${REST_PERIOD_MS/1000} seconds...`;
+                    // 4. Wait for the rest period, then load next
+                    setTimeout(loadNextChunk, REST_PERIOD_MS);
+                } else {
+                    document.getElementById("status").innerText = `Error sending ${fileName} to localhost.`;
+                }
+            })
+            .catch(err => {
+                document.getElementById("status").innerText = "Local server not running!";
+                console.error(err);
+            });
+        };
+
+        // Trigger the iframe download
+        iframe.src = fileName;
+    }
+</script>
+</body>
+</html>
