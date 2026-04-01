@@ -1,0 +1,67 @@
+public class ChunkPayload {
+    private int index;
+    private int total;
+    private String data;
+
+    // Getters and Setters
+    public int getIndex() { return index; }
+    public void setIndex(int index) { this.index = index; }
+    public int getTotal() { return total; }
+    public void setTotal(int total) { this.total = total; }
+    public String getData() { return data; }
+    public void setData(String data) { this.data = data; }
+}
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import java.io.IOException;
+import java.nio.file.*;
+import java.util.Base64;
+
+@RestController
+@RequestMapping("/api")
+// CRITICAL: Change this to your actual GitHub Pages URL to prevent CORS blocks
+@CrossOrigin(origins = "https://yourusername.github.io") 
+public class DownloadController {
+
+    private static final String OUTPUT_FILE = "reconstructed_file.zip";
+
+    @PostMapping("/upload")
+    public ResponseEntity<String> receiveChunk(@RequestBody ChunkPayload payload) {
+        try {
+            // Delete old file if this is the very first chunk
+            Path path = Paths.get(OUTPUT_FILE);
+            if (payload.getIndex() == 0 && Files.exists(path)) {
+                Files.delete(path);
+            }
+
+            // Decode the Base64 text back into original binary bytes
+            byte[] decodedBytes = Base64.getDecoder().decode(payload.getData().trim());
+
+            // Append the bytes to the local file
+            Files.write(path, decodedBytes, 
+                        StandardOpenOption.CREATE, 
+                        StandardOpenOption.APPEND);
+
+            System.out.println("Received and saved chunk " + (payload.getIndex() + 1) + 
+                               " of " + payload.getTotal());
+
+            if (payload.getIndex() == payload.getTotal() - 1) {
+                System.out.println("Download complete! File saved as: " + OUTPUT_FILE);
+            }
+
+            return ResponseEntity.ok("Chunk processed");
+            
+        } catch (IOException e) {
+            e.printStackTrace();
+            return ResponseEntity.internalServerError().body("Error writing to disk");
+        } catch (IllegalArgumentException e) {
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("Invalid Base64 data");
+        }
+    }
+}
+
+server.tomcat.max-http-form-post-size=10MB
+spring.servlet.multipart.max-file-size=10MB
+spring.servlet.multipart.max-request-size=10MB
